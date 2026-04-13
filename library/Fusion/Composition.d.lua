@@ -30,7 +30,7 @@
 ---@field UseNetwork boolean? Enable network rendering
 ---@field Groups string? Network slave group selection (default "all")
 ---@field Flags number? Render flags (e.g. 262144 for preview renders)
----@field Tool fu.Tool? Render only up to this tool
+---@field Tool fu.Operator? Render only up to this tool
 ---@field FrameRange string? Non-contiguous frame ranges (e.g. "1..10,20..30")
 ---@field Wait boolean? Wait for render completion
 
@@ -94,6 +94,12 @@
 --- without needing a `comp.` prefix.
 ---
 ---@class fu.Comp : fu.Object
+---@field ActiveTool fu.Operator Read-only. Currently active tool in the comp.
+---@field AutoPos boolean Whether new tools auto-position in flow.
+---@field CurrentFrame fu.FuFrame Read-only. Current frame in timeline.
+---@field CurrentTime number Current time position in seconds/frames.
+---@field XPos number X position for next added tool in flow.
+---@field YPos number Y position for next added tool in flow.
 local Composition = {}
 
 --- Attribute structure for Composition objects.
@@ -119,31 +125,6 @@ local Composition = {}
 ---@field COMPI_RenderStep integer Render step value
 ---@field COMPB_Locked boolean Whether composition is locked
 
---- Returns the currently active tool in the composition.
----@return fu.Tool tool Active tool
-function Composition:GetActiveTool() end
-
---- Enables or disables automatic positioning of newly added tools.
----@param val boolean Whether auto-positioning is enabled
-function Composition:SetAutoPos(val) end
-
---- Returns the current frame (timeline frame object).
----@return fu.FuFrame frame Current frame object
-function Composition:GetCurrentFrame() end
-
---- Gets or sets the current time of the composition.
----@param val number? Optional time to set
----@return number currentTime Current composition time
-function Composition:GetCurrentTime(val) end
-
---- Sets the X position for the next tool added to the flow.
----@param val number X coordinate
-function Composition:SetXPos(val) end
-
---- Sets the Y position for the next tool added to the flow.
----@param val number Y coordinate
-function Composition:SetYPos(val) end
-
 --- Stops any active render immediately.
 function Composition:AbortRender() end
 
@@ -159,7 +140,7 @@ function Composition:AbortRenderUI() end
 ---@param defsettings boolean? Use user-modified default settings (default false)
 ---@param xpos number? Flow X position
 ---@param ypos number? Flow Y position
----@return fu.Tool tool Newly created tool instance
+---@return fu.Operator tool Newly created tool instance
 function Composition:AddTool(id, defsettings, xpos, ypos) end
 
 --- Shows the Render Settings dialog for the composition.
@@ -270,12 +251,12 @@ function Composition:Close() end
 function Composition:Copy() end
 
 --- Copies a single tool to the clipboard.
----@param tool fu.Tool Tool to copy
+---@param tool fu.Operator Tool to copy
 ---@return boolean success True if copy succeeded
 function Composition:Copy(tool) end
 
 --- Copies a list of tools to the clipboard.
----@param toollist fu.Tool[] List of tools to copy
+---@param toollist fu.Operator[] List of tools to copy
 ---@return boolean success True if copy succeeded
 function Composition:Copy(toollist) end
 
@@ -284,12 +265,12 @@ function Composition:Copy(toollist) end
 function Composition:CopySettings() end
 
 --- Copies a single tool into a settings table.
----@param tool fu.Tool Tool to serialize
+---@param tool fu.Operator Tool to serialize
 ---@return table settings Serialized tool settings
 function Composition:CopySettings(tool) end
 
 --- Copies a list of tools into a settings table.
----@param toollist fu.Tool[] List of tools to serialize
+---@param toollist fu.Operator[] List of tools to serialize
 ---@return table settings Serialized tool settings
 function Composition:CopySettings(toollist) end
 
@@ -321,7 +302,7 @@ function Composition:Execute(code) end
 
 --- Finds the first tool with the given name in the composition.
 ---@param name string Tool name
----@return fu.Tool? tool Found tool or nil if not found
+---@return fu.Operator? tool Found tool or nil if not found
 function Composition:FindTool(name) end
 
 --- Finds the first tool of a given type (RegID).
@@ -333,8 +314,8 @@ function Composition:FindTool(name) end
 --- local b1 = comp:FindToolByID("Blur")
 --- local b2 = comp:FindToolByID("Blur", b1)
 ---@param id string Tool RegID (e.g. "Blur", "Merge")
----@param prev fu.Tool? Previous tool to continue search from
----@return fu.Tool? tool First matching tool or nil
+---@param prev fu.Operator? Previous tool to continue search from
+---@return fu.Operator? tool First matching tool or nil
 function Composition:FindToolByID(id, prev) end
 
 --- Returns all composition PathMaps.
@@ -383,7 +364,7 @@ function Composition:GetFrameList() end
 --- If `tool` is provided, only that tool is considered.
 --- Otherwise, all tools in the composition are searched.
 ---@param time number? Start time for search
----@param tool fu.Tool? Optional tool filter
+---@param tool fu.Operator? Optional tool filter
 ---@return number? time Next keyframe time or nil
 function Composition:GetNextKeyTime(time, tool) end
 
@@ -403,7 +384,7 @@ function Composition:GetPrefs(prefname, exclude_defaults) end
 --- If `tool` is provided, only that tool is searched.
 --- Otherwise all tools in the composition are considered.
 ---@param time number? Reference time for search
----@param tool fu.Tool? Optional tool filter
+---@param tool fu.Operator? Optional tool filter
 ---@return number? time Previous keyframe time or nil
 function Composition:GetPrevKeyTime(time, tool) end
 
@@ -422,7 +403,7 @@ function Composition:GetPreviewList(include_globals) end
 --- If no tools match selection criteria, nil may be returned.
 ---@param selected boolean? Return only selected tools
 ---@param regid string? Tool RegID filter (e.g. "Loader", "Blur")
----@return fu.Tool[]? tools List of tool handles or nil
+---@return fu.Operator[]? tools List of tool handles or nil
 function Composition:GetToolList(selected, regid) end
 
 --- Returns all view objects in the composition.
@@ -617,7 +598,7 @@ function Composition:SaveCopyAs() end
 --- Passing nil clears the active tool selection.
 --- Active tool differs from selected tools (selection is multi-tool).
 ---
----@param tool fu.Tool? Tool to set as active, or nil to clear selection
+---@param tool fu.Operator? Tool to set as active, or nil to clear selection
 function Composition:SetActiveTool(tool) end
 
 ----------------------------------------------------------------
