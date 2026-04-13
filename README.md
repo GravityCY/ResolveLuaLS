@@ -1,2 +1,2 @@
 # A repo containing the LuaLS type definitions for most of the scripting apis
-This is very WIP and uses ChatGPT to convert the README so take everything with a grain of salt, but hey at least we now have full typing
+This is very WIP and uses ChatGPT to convert any available docs I find so take everything with a grain of salt, but hey at least we now have full typing
