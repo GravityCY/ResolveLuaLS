@@ -1,82 +1,172 @@
 ---@meta
 
----@class fu.CompAttribs
----@field COMPN_CurrentTime number This is the current time that the composition is at. This is the time that the user will see, and any modifications that do not specify a time will set a keyframe at this time.
----@field COMPB_HiQ boolean Indicates if the composition is currently in ‘HiQ’ mode or not.
----@field COMPB_Proxy boolean Indicates if the composition is currently in ‘Proxy’ mode or not
----@field COMPB_Rendering integer Indicates if the composition is currently rendering
----@field COMPN_RenderStart number The render start time of the composition. A render with no start will begin from this time.
----@field COMPN_RenderEnd number The render end time of the composition. A render with no end specified will render this frame last.
----@field COMPN_GlobalStart number The global start time of the comp. This is the start of time at which the composition is valid. Anything before this cannot be rendered or evaluated.
----@field COMPN_GlobalEnd number The global end time of the composition. This is the end of time at which the comp is valid. Anything after this cannot be rendered or evaluated.
----@field COMPN_LastFrameRendered number The most recent frame that has been successfully completed during a render.
----@field COMPN_LastFrameTime number The amount of time taken to render the most recently completed frame, in seconds.
----@field COMPN_AverageFrameTime number The average amount of time taken to render each frame to this point of the render, in seconds
----@field COMPN_TimeRemaining number An estimation of how much more time will be needed to complete this render, in seconds.
----@field COMPS_FileName string The full path and name of the composition file.
----@field COMPS_Name string The name of the composition.
----@field COMPI_RenderFlags integer The flags specified for the current render.
----@field COMPI_RenderStep integer The step value being used for the current render.
----@field COMPB_Locked boolean This indicates if the composition is currently locked
+---@class fu.CompositionRenderSettings
+---@field wait_for_render boolean? Whether to wait for render completion (default false)
+---@field renderstart number? Frame to start rendering at
+---@field renderend number? Frame to stop rendering at
+---@field step number? Render every Nth frame (e.g. 2 = every second frame)
+---@field proxy number? Proxy scale factor for faster rendering
+---@field hiQ boolean? High quality render (default true)
+---@field mblur boolean? Motion blur enable (default true)
 
----@class fu.Comp
----@field Activetool fu.Operator Represents the currently active tool on this comp (read-only).
----@field AutoPos boolean Enable autoupdating of XPos/YPos when adding tools.
----@field CurrentFrame fu.FuFrame Represents the currently active frame for this composition (read-only).
----@field CurrentTime number The current time position for this composition.
----@field UpdateMode "Some"|"All"|"None" Represents the Some/All/None mode.
----@field XPos number The X coordinate on the flow of the next added tool.
----@field YPos number The Y coordinate on the flow of the next added tool.
-local Comp = {};
+---@class fu.CompositionRenderTable
+---@field Start number? First frame to render (default: comp render end setting)
+---@field End number? Last frame to render (inclusive)
+---@field HiQ boolean? High quality render (default true)
+---@field RenderAll boolean? Render all tools regardless of downstream usage (default false)
+---@field MotionBlur boolean? Enable motion blur (default true)
+---@field SizeType integer?
+---| -1 # Custom (PreviewSaver only)
+---| 0  # Use preferences setting
+---| 1  # Full size (default)
+---| 2  # Half size
+---| 3  # Third size
+---| 4  # Quarter size
+---@field Width number? Custom render width (SizeType = -1)
+---@field Height number? Custom render height (SizeType = -1)
+---@field KeepAspect boolean? Maintain aspect ratio in custom sizing
+---@field StepRender boolean? Enable stepped rendering (shoot on X frames)
+---@field Steps number? Step interval count (default 5)
+---@field UseNetwork boolean? Enable network rendering
+---@field Groups string? Network slave group selection (default "all")
+---@field Flags number? Render flags (e.g. 262144 for preview renders)
+---@field Tool fu.Tool? Render only up to this tool
+---@field FrameRange string? Non-contiguous frame ranges (e.g. "1..10,20..30")
+---@field Wait boolean? Wait for render completion
 
---- Stops any current rendering.
-function Comp:AbortRender() end
+--- Valid control types for Composition:AskUser().
+---
+--- These define which UI widget Fusion will render for the control.
+---@alias fu.AskUserControlType
+---| "FileBrowse"
+---| "PathBrowse"
+---| "ClipBrowse"
+---| "Position"
+---| "Slider"
+---| "Screw"
+---| "Checkbox"
+---| "Dropdown"
+---| "Text"
 
---- Asks the user before aborting the render.
-function Comp:AbortRenderUI() end
+--- Result table returned by Composition:AskUser().
+---
+--- Each key corresponds to the control's ID (first field in definition table).
+--- Values depend on control type:
+--- - number for sliders/screws
+--- - boolean for checkboxes
+--- - string for text/file paths
+--- - table for position controls
+---@alias fu.AskUserResult table<string, number|string|boolean|table>
 
---- Adds a tool type at a specified position.
---- 
---- - id the RegID of the tool to add.
---- - defsettings specifies whether user-modified default settings should be applied for the new tool (true) or not (false, default).
---- - xpos the X position of the tool in the flow view.
---- - ypos the Y position of the tool in the flow view.
---- 
---- You can use the number -32768 (the smallest negative value of a 16-bit integer) for both
---- x and y position. This will cause Fusion to add the tool as if you had clicked on one of
---- the toolbar icons. The tool will be positioned next to the currently selected one and a
---- connection will automatically be made if possible. If no tool is selected then the last
---- clicked position on the flow will be used. The same behaviour can be achieved with the
---- comp:AddToolAction method.
---- 
---- Returns a tool handle that can be used to control the newly added tool.
---- 
---- **Lua usage:**
---- ```
---- bg = comp:AddTool(“Background”, 1, 1)
---- mg = comp:AddTool(“Merge”, -32768, -32768)
---- ```
----@param id string
----@param defsettings boolean?
----@param xpos number?
----@param ypos number?
----@return fu.Operator
-function Comp:AddTool(id, defsettings, xpos, ypos) end
+--- A single UI control definition for Composition:AskUser().
+---
+--- Each entry defines:
+--- - a unique key (table index)
+--- - a control type (widget)
+--- - optional configuration values depending on type
+---
+--- This is used to dynamically construct modal UI dialogs.
+---@class fu.AskUserControl
+---@field [1] string? Display label override
+---@field [2] fu.AskUserControlType Control widget type
+---@field Default any? Default value (type depends on ControlType)
+---@field Min number? Minimum numeric value (Slider/Screw)
+---@field Max number? Maximum numeric value (Slider/Screw)
+---@field DisplayedPrecision number? Decimal precision for numeric controls
+---@field Integer boolean? Force integer values (Slider/Screw)
+---@field Save boolean? FileBrowse: treat as save dialog
+---@field Lines integer? Text: number of visible lines
+---@field Wrap boolean? Text: enable wrapping
+---@field ReadOnly boolean? Text: disable editing
+---@field FontName string? Text font family
+---@field FontSize number? Text font size
+---@field LowName string? Slider minimum label
+---@field HighName string? Slider maximum label
+---@field NumAcross integer? Checkbox layout grouping
+---@field Options string[]? Dropdown options list
 
---- Adds a tool to the comp.
---- 
---- If no positions are given it will cause Fusion to add the tool as if you had clicked on one
---- of the toolbar icons. The tool will be positioned next to the currently selected one and a
---- connection will automatically be made if possible. If no tool is selected then the last clicked
---- position on the flow will be used.
---- 
----@param id string
----@param xpos number?
----@param ypos number?
-function Comp:AddToolAction(id, xpos, ypos) end
+--- Composition represents a full Fusion composition (flow graph + timeline context).
+---
+--- It is the central runtime object that controls time evaluation, rendering,
+--- tool creation, and global composition state.
+---
+--- In Lua console scripts, Composition methods are globally accessible
+--- without needing a `comp.` prefix.
+---
+---@class fu.Comp : fu.Object
+local Composition = {}
 
---- Show the Render Settings dialog.
-function Comp:AskRenderSettings() end
+--- Attribute structure for Composition objects.
+---
+--- Contains runtime state for playback, rendering, timing bounds,
+--- and composition-level configuration flags.
+---@class fu.CompositionAttrs
+---@field COMPN_CurrentTime number Current evaluation time of the composition
+---@field COMPB_HiQ boolean HiQ (high quality) mode enabled state
+---@field COMPB_Proxy boolean Proxy mode enabled state
+---@field COMPB_Rendering integer Whether composition is currently rendering
+---@field COMPN_RenderStart number Render start time
+---@field COMPN_RenderEnd number Render end time
+---@field COMPN_GlobalStart number Global start time (valid evaluation range start)
+---@field COMPN_GlobalEnd number Global end time (valid evaluation range end)
+---@field COMPN_LastFrameRendered number Last successfully rendered frame
+---@field COMPN_LastFrameTime number Time taken for last frame render (seconds)
+---@field COMPN_AverageFrameTime number Average render time per frame (seconds)
+---@field COMPN_TimeRemaining number Estimated remaining render time (seconds)
+---@field COMPS_FileName string Full file path of the composition
+---@field COMPS_Name string Name of the composition
+---@field COMPI_RenderFlags integer Render flags for current render
+---@field COMPI_RenderStep integer Render step value
+---@field COMPB_Locked boolean Whether composition is locked
+
+--- Returns the currently active tool in the composition.
+---@return fu.Tool tool Active tool
+function Composition:GetActiveTool() end
+
+--- Enables or disables automatic positioning of newly added tools.
+---@param val boolean Whether auto-positioning is enabled
+function Composition:SetAutoPos(val) end
+
+--- Returns the current frame (timeline frame object).
+---@return fu.FuFrame frame Current frame object
+function Composition:GetCurrentFrame() end
+
+--- Gets or sets the current time of the composition.
+---@param val number? Optional time to set
+---@return number currentTime Current composition time
+function Composition:GetCurrentTime(val) end
+
+--- Sets the X position for the next tool added to the flow.
+---@param val number X coordinate
+function Composition:SetXPos(val) end
+
+--- Sets the Y position for the next tool added to the flow.
+---@param val number Y coordinate
+function Composition:SetYPos(val) end
+
+--- Stops any active render immediately.
+function Composition:AbortRender() end
+
+--- Asks user confirmation before aborting render.
+function Composition:AbortRenderUI() end
+
+--- Adds a tool to the composition at a specified position.
+---
+--- If xpos and ypos are omitted, the tool is placed using default flow rules.
+--- Passing -32768 for both coordinates uses automatic placement behavior
+--- similar to clicking a toolbar tool.
+---@param id string Tool RegID
+---@param defsettings boolean? Use user-modified default settings (default false)
+---@param xpos number? Flow X position
+---@param ypos number? Flow Y position
+---@return fu.Tool tool Newly created tool instance
+function Composition:AddTool(id, defsettings, xpos, ypos) end
+
+--- Shows the Render Settings dialog for the composition.
+---
+--- This opens the standard Fusion render settings UI and blocks execution
+--- until the user confirms or cancels the dialog.
+function Composition:AskRenderSettings() end
 
 --- Present a custom dialog to the user, and return selected values.
 --- 
@@ -143,305 +233,500 @@ function Comp:AskRenderSettings() end
 --- ```
 --- 
 ---@param title string
----@param controls table
----@return table
-function Comp:AskUser(title, controls) end
+---@param controls fu.AskUserControl[] Control definitions
+---@return fu.AskUserResult? results Result table or nil if cancelled
+function Composition:AskUser(title, controls) end
 
---- Displays a dialog with a list of selectable tools.
---- 
---- Returns the RegID of the selected tool or nil if the dialog was canceled.
----@param path string
----@return string
-function Comp:ChooseTool(path) end
-
---- Clears the undo/redo history for the composition.
-function Comp:ClearUndo() end
-
---- The Close function is used to close a composition. The Fusion Composition object that
---- calls the function will then be set to nil.
---- 
---- If the comp is in locked mode, then the Close function will not attempt to save the comp,
---- whether the comp has been modified or not since its last save. If modifications have been
---- made that should be kept, call the Save() function first.
---- 
---- If the comp is unlocked, it will ask if the comp should be saved before closing.
---- 
----@return boolean?
-function Comp:Close() end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Copy tools to the Clipboard.
---- 
---- Accepts no parameters (currently selected tools), a tool or a list of tools.
----@return boolean
-function Comp:Copy() end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Copy tools to the Clipboard.
---- 
---- Accepts no parameters (currently selected tools), a tool or a list of tools.
---- 
---- Returns true if successful, else false.
---- 
----@param tool fu.Operator
----@return boolean
-function Comp:Copy(tool) end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Copy tools to the Clipboard.
---- 
---- Accepts no parameters (currently selected tools), a tool or a list of tools.
---- 
---- Returns true if successful, else false.
----@param toollist table
----@return boolean
-function Comp:Copy(toollist) end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Copy a tools to a settings table.
---- 
---- Accepts no parameters (currently selected tools), a tool or a list of tools.
----@return table
-function Comp:CopySettings() end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Copy a tools to a settings table.
---- 
---- Accepts no parameters (currently selected tools), a tool or a list of tools.
---- 
---- Returns the toollist as settings table.
----@param tool fu.Operator
----@return table
-function Comp:CopySettings(tool) end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Copy a tools to a settings table.
----@param toollist table
-function Comp:CopySettings(toollist) end
-
---- Collapses a path into best-matching path map.
---- 
---- Whereas MapPath() is used to expand any Fusion path maps within a pathname to get an
---- ordinary literal path, ReverseMapPath() will perform the opposite process, and re-insert
---- those path maps.
---- 
---- This is often useful if the path is to be stored for later usage (within a comp or script, for
---- example). It allows the path to be used with the same meaning for another system or
---- situation, where the literal location of the path may be different.
---- 
---- In addition to handling all the global path maps like Fusion:ReverseMapPath(),
---- Comp:ReverseMapPath() also handles any path maps listed in the composition’s
---- Path Maps preferences page, as well as the built-in Comp: path map (see MapPath()).
---- 
---- Returns a path with the Fusion path map handles re-inserted wherever possible.
----@param mapped string
----@return string
-function Comp:ReverseMapPath(mapped) end
-
---- Run a script within the composition’s script context.
---- 
---- Use this function to run a script in the composition environment. This is similar to launching
---- a script from the comp’s Scripts menu.
---- 
---- The script will be started with ‘fusion’ and ‘composition’ variables set to the Fusion and
---- currently active Composition objects. The filename given may be fully specified, or may be
---- relative to the comp’s Scripts: path.
---- 
---- Fusion supports .py .py2 and .py3 extensions to differentiate python script versions.
----@param filename string
-function Comp:RunScript(filename) end
-
---- Save the composition
---- 
---- This function causes the composition to be saved to disk. The compname argument must
---- specify a path relative to the filesystem of the Fusion which is saving the composition. In
---- other words - if system ‘a’ is using the Save() function to instruct a Fusion on system ‘b’ to
---- save a composition, the path provided must be valid from the perspective of system ‘b’.
---- 
---- filename is the complete path and name of the composition to be saved.
----@param filename string
----@return boolean
-function Comp:Save(filename) end
-
---- Prompt user with a Save As dialog box to save the composition.
-function Comp:SaveAs() end
-
---- Prompt user with a Save As dialog box to save the composition as copy.
-function Comp:SaveCopyAs() end
-
---- Set the currently active tool.
---- 
---- This function will set the currently active tool to one specified by script. It can be read with
---- ActiveTool.
---- 
---- To deselect all tools, omit the parameter or use nil.
---- 
---- Note that ActiveTool also means the tool is selected, while selected tools are not automativally
---- Active. Only one tool can be Active at a time. To select tools use FlowView:Select().
----@param tool fu.Operator
-function Comp:SetActiveTool(tool) end
-
---- Set custom persistent data.
---- 
---- - name name of the data. This name can be in “table.subtable” format, to allow persistent
---- data to be stored within subtables.
---- - value to be recorded in the object’s persistent data. It can be of almost any type.
---- 
---- Persistent data is a very useful way to store names, dates, filenames, notes, flags, or anything
---- else, in such a way that they are permanently associated with this instance of the object,
---- and are stored along with the object using SetData(), and can be retrieved at any time with
---- GetData().
---- 
---- The method of storage varies by object: SetData() called on the Fusion app itself will
---- save its data in the Fusion.prefs file, and will be available whenever that copy of Fusion is
---- running. Calling SetData() on any object associated with a Composition will cause the data
---- to be saved in the .comp file, or in any settings files that may be saved directly from that
---- object. Some ephemeral objects that are not associated with any composition and are not
---- otherwise saved in any way, may not have their data permanently stored at all, and the data
---- will only persist as long as the object itself does.
---- 
---- **Lua usage:**
---- ```
---- tool:SetData(“Modified.Author”, fusion:GetEnv(“USERNAME”))
---- tool:SetData(“Modified.Date”, os.date())
---- dump(tool:GetData(“Modified”))
---- ```
----@param name string
----@param value any
-function Comp:SetData(name, value) end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Set preferences from a table of attributes.
---- 
---- The SetPrefs function can be used to specify the values of virtually all preferences in Fusion.
---- 
---- Its can take a table of values, identified by name, or a single name and value.
---- 
---- The table provided as an argument should have the format [prefs_name] = value. Subtables
---- are allowed.
---- 
---- It is possible to set a preference that does not exist. For example, setting fusion:SetPrefs
---- ({Comp.FrameFormat.Stuff = “Bob”}) will create a new preference which will be thereafter
---- preserved in the Fusion preferences file.
---- 
---- Returns false if any of the arguments provided to it are invalid, and true otherwise. Note
---- that the function will still return true if an attempt is made to set a preference to an invalid
---- value. For example, attempting to setting the FPS to “Bob” will fail, but the function will still
---- return true.
---- 
---- **Lua usage:**
---- ```
---- comp:SetPrefs({ [“Comp.Unsorted.GlobalStart”]=0, [“Comp.Unsorted.GlobalEnd”]=100 })
---- comp:SetPref(“Comp.Interactive.BackgroundRender”, true)
---- ```
----@param prefname string
----@param val any
-function Comp:SetPrefs(prefname, val) end
-
---- Note: This method is overloaded and has alternative parameters. See other definitions.
---- 
---- Set preferences from a table of attributes.
---- 
---- The SetPrefs function can be used to specify the values of virtually all preferences in Fusion.
---- 
---- Its can take a table of values, identified by name, or a single name and value.
---- 
---- The table provided as an argument should have the format [prefs_name] = value. Subtables
---- are allowed.
---- 
---- It is possible to set a preference that does not exist. For example, setting fusion:
---- SetPrefs({Comp.FrameFormat.Stuff = “Bob”}) will create a new preference which will be
---- thereafter preserved in the Fusion preferences file.
---- 
---- Returns false if any of the arguments provided to it are invalid, and true otherwise.
---- 
---- Note that the function will still return true if an attempt is made to set a preference to an
---- invalid value. For example, attempting to setting the FPS to “Bob” will fail, but the function
---- will still return true.
---- 
---- **Lua usage:**
---- ```
---- comp:SetPrefs({ [“Comp.Unsorted.GlobalStart”]=0, [“Comp.Unsorted.GlobalEnd”]=100 })
---- comp:SetPref(“Comp.Interactive.BackgroundRender”, true)
---- ```
----@param prefs table
-function Comp:SetPrefs(prefs) end
-
---- Start an undo event.
---- 
---- The StartUndo() function is always paired with an EndUndo() function. Any changes made
---- to the composition by the lines of script between StartUndo() and EndUndo() are stored as
---- a single Undo event.
---- 
---- Changes captured in the undo event can be undone from the GUI using CTRL-Z, or the Edit
---- menu. They can also be undone from script, by calling the Undo function.
---- 
---- Should be used sparingly, as the user (or script) will have no way to undo the
---- preceding commands.
---- 
---- - name specifies the name displayed in the Edit/Undo menu of the Fusion GUI a string
---- containing the complete path and name of the composition to be saved.
---- 
---- Actual changes must be made to the composition (forcing a “dirty” event) before the undo
---- will be added to the stack.
---- 
---- **Lua usage:**
---- ```
---- composition:StartUndo(“Add some tools”)
---- bg1 = Background{}
---- pl1 = Plasma{}
---- mg1 = Merge{ Background = bg1, Foreground = pl1 }
---- composition:EndUndo(true)
---- ```
----@param name string
-function Comp:StartUndo(name) end
-
---- Stops interactive playback.
---- 
---- Use this function in the same way that you would use the Stop button in the composition’s
---- playback controls.
-function Comp:Stop() end
-
---- Undo one or more changes to the composition.
---- 
---- The Undo function triggers an undo event in Fusion. The count argument determines how
---- many undo events are triggered.
---- 
---- Note that the value of count can be negative, in which case Undo will behave as a Redo,
---- acting exactly as the Redo() function does.
---- 
---- - count specifies how many undo events to trigger.
+--- Displays a dialog allowing the user to select a tool from a filtered list.
 ---
----@param count number
-function Comp:Undo(count) end
+--- The `path` argument defines the tool category or browser path used to
+--- populate the selection list.
+---
+--- Returns the selected tool RegID as a string, or nil if cancelled.
+---@param path string Tool browser path filter
+---@return string? id Selected tool RegID or nil
+function Composition:ChooseTool(path) end
 
---- Unlock the composition.
---- 
---- The Unlock() function returns a composition to interactive mode. This allows Fusion to show
---- dialog boxes to the user, and allows re-rendering in response to changes to the controls.
---- Calling Unlock() will have no effect unless the composition has been locked with the Lock()
---- function first.
---- 
---- It is often useful to surround a script with Lock() and Unlock(), especially when adding tools
---- or modifying a composition. Doing this ensures Fusion won’t pop up a dialog to ask for user
---- input, e.g. when adding a Loader, and can also speed up the operation of the script since
---- no time will be spent rendering until the comp is unlocked.
---- 
---- **Lua usage:**
---- ```
---- comp:Lock()
---- -- Will not open the file dialog, since the composition is locked
---- my_loader = Loader()
---- comp:Unlock()
---- ```
-function Comp:Unlock() end
+--- Clears the entire undo/redo history for this composition.
+---
+--- This permanently removes all stored undo states for the current session.
+function Composition:ClearUndo() end
 
---- UpdateViews
-function Comp:UpdateViews() end
+--- Closes the composition.
+---
+--- If the composition is modified and unlocked, the user may be prompted
+--- to save changes before closing.
+---
+--- If the composition is locked, it will close without saving regardless
+--- of modification state.
+---
+--- After closing, the Composition object becomes invalid (nil).
+---
+---@return boolean? success True if closed successfully, nil if failure
+function Composition:Close() end
+
+--- Copies the currently selected tools to the clipboard.
+---@return boolean success True if copy succeeded
+function Composition:Copy() end
+
+--- Copies a single tool to the clipboard.
+---@param tool fu.Tool Tool to copy
+---@return boolean success True if copy succeeded
+function Composition:Copy(tool) end
+
+--- Copies a list of tools to the clipboard.
+---@param toollist fu.Tool[] List of tools to copy
+---@return boolean success True if copy succeeded
+function Composition:Copy(toollist) end
+
+--- Copies the currently selected tools into a settings table.
+---@return table settings Serialized tool settings
+function Composition:CopySettings() end
+
+--- Copies a single tool into a settings table.
+---@param tool fu.Tool Tool to serialize
+---@return table settings Serialized tool settings
+function Composition:CopySettings(tool) end
+
+--- Copies a list of tools into a settings table.
+---@param toollist fu.Tool[] List of tools to serialize
+---@return table settings Serialized tool settings
+function Composition:CopySettings(toollist) end
+
+--- Disables (passes through) all currently selected tools.
+---
+--- This effectively bypasses selected tools in the flow.
+function Composition:DisableSelectedTools() end
+
+--- Ends an undo block previously started with StartUndo().
+---
+--- If `keep` is true, the recorded actions are committed as a single undo step.
+--- If false, the undo block is discarded and cannot be reverted.
+---
+--- If EndUndo is not called, Fusion automatically finalizes the undo block.
+---@param keep boolean Whether to keep the undo entry
+function Composition:EndUndo(keep) end
+
+--- Executes a script string in the context of this composition.
+---
+--- By default executes Lua code.
+--- Python can be selected using prefixes:
+--- - `!Py:`  default Python
+--- - `!Py2:` Python 2
+--- - `!Py3:` Python 3
+---
+--- Note: Use `fusion:Execute()` for global Fusion context execution.
+---@param code string Script code to execute
+function Composition:Execute(code) end
+
+--- Finds the first tool with the given name in the composition.
+---@param name string Tool name
+---@return fu.Tool? tool Found tool or nil if not found
+function Composition:FindTool(name) end
+
+--- Finds the first tool of a given type (RegID).
+---
+--- This returns only the first matching tool in the composition.
+--- To continue searching, pass the previously found tool as `prev`.
+---
+--- Example:
+--- local b1 = comp:FindToolByID("Blur")
+--- local b2 = comp:FindToolByID("Blur", b1)
+---@param id string Tool RegID (e.g. "Blur", "Merge")
+---@param prev fu.Tool? Previous tool to continue search from
+---@return fu.Tool? tool First matching tool or nil
+function Composition:FindToolByID(id, prev) end
+
+--- Returns all composition PathMaps.
+---
+--- PathMaps define directory mappings used for resolving file paths.
+--- These may include built-in, user-defined, or default mappings depending
+--- on the provided flags.
+---@param built_ins boolean? Include built-in path maps (default false)
+---@param defaults boolean? Include default path maps (default true)
+---@return table map PathMap table
+function Composition:GetCompPathMap(built_ins, defaults) end
+
+--- Returns the composition console history.
+---
+--- If no parameters are provided, returns general console statistics
+--- including total line count.
+---
+--- If only `startSeq` is provided, returns history from that point onward.
+--- If both `startSeq` and `endSeq` are provided, returns the range.
+---
+--- Useful for debugging scripts, warnings, and execution logs.
+---@param startSeq number? Starting console sequence index
+---@param endSeq number? Ending console sequence index
+---@return table history Console history table or summary
+function Composition:GetConsoleHistory(startSeq, endSeq) end
+
+--- Retrieves persistent custom data stored on the composition.
+---
+--- Data is stored alongside the composition and persists in .comp files.
+--- Nested keys may be accessed using dot notation (e.g. "User.Settings.Theme").
+---
+--- This is commonly used for storing metadata such as authorship, notes,
+--- timestamps, and pipeline state.
+---@param name string? Optional data key
+---@return number|string|boolean|table value Stored value
+function Composition:GetData(name) end
+
+--- Returns all child frame windows in the Fusion UI.
+---
+--- ChildFrames represent the workspace windows containing viewers and tools.
+---@return table frames List of frame objects
+function Composition:GetFrameList() end
+
+--- Returns the next keyframe time after a given time.
+---
+--- If `tool` is provided, only that tool is considered.
+--- Otherwise, all tools in the composition are searched.
+---@param time number? Start time for search
+---@param tool fu.Tool? Optional tool filter
+---@return number? time Next keyframe time or nil
+function Composition:GetNextKeyTime(time, tool) end
+
+--- Returns composition preferences or a specific preference value.
+---
+--- If `prefname` is nil, returns full preference table.
+--- Dot notation can be used for nested preference keys.
+---
+--- If `exclude-defaults` is true, default values are omitted.
+---@param prefname string? Preference key (dot notation supported)
+---@param exclude_defaults boolean? Exclude default values from result
+---@return table prefs Preference table or value
+function Composition:GetPrefs(prefname, exclude_defaults) end
+
+--- Returns the previous keyframe time before a given time.
+---
+--- If `tool` is provided, only that tool is searched.
+--- Otherwise all tools in the composition are considered.
+---@param time number? Reference time for search
+---@param tool fu.Tool? Optional tool filter
+---@return number? time Previous keyframe time or nil
+function Composition:GetPrevKeyTime(time, tool) end
+
+--- Returns the list of available preview views for the composition.
+---
+--- These represent viewer contexts within the composition.
+--- For floating/global previews, use `fusion:GetPreviewList()` instead.
+---@param include_globals boolean? Include global views (default false)
+---@return table previews List of preview view objects
+function Composition:GetPreviewList(include_globals) end
+
+--- Returns all tools in the composition or filtered subsets.
+---
+--- If `selected` is true, only selected tools are returned.
+--- If `regid` is provided, results are filtered by tool type.
+--- If no tools match selection criteria, nil may be returned.
+---@param selected boolean? Return only selected tools
+---@param regid string? Tool RegID filter (e.g. "Loader", "Blur")
+---@return fu.Tool[]? tools List of tool handles or nil
+function Composition:GetToolList(selected, regid) end
+
+--- Returns all view objects in the composition.
+---
+--- These represent viewer instances tied to the composition workspace.
+---@return table views List of view objects
+function Composition:GetViewList() end
+
+--- Heartbeat function used internally for composition update cycles.
+function Composition:Heartbeat() end
+
+--- Returns true if the composition is locked (non-interactive mode).
+---
+--- When locked, dialogs and updates are suppressed.
+---@return boolean locked True if comp is locked
+function Composition:IsLocked() end
+
+--- Returns true if the composition is currently playing.
+---@return boolean playing Playback active state
+function Composition:IsPlaying() end
+
+--- Returns true if the composition is rendering or actively processing frames.
+---
+--- This includes playback rendering and tool evaluation renders.
+---@return boolean rendering Render/processing state
+function Composition:IsRendering() end
+
+--- Locks the composition from interactive updates.
+---
+--- While locked, Fusion suppresses dialogs and prevents UI-triggered re-evaluation.
+--- This is useful for batch scripts or bulk tool operations.
+function Composition:Lock() end
+
+--- Controls looping behavior for composition playback.
+---
+--- This is an overloaded function accepting either:
+--- - boolean enable/disable
+--- - string playback mode
+---@param mode boolean|string Loop enable flag or mode string
+function Composition:Loop(mode) end
+
+--- Expands path maps into absolute filesystem paths.
+---
+--- Converts Fusion-style paths (e.g. "Comp:", "Fusion:") into literal paths.
+--- If no mapping exists, the path is returned unchanged.
+---
+--- This function respects both global and composition-specific path maps.
+---@param path string Input path containing optional map tokens
+---@return string mapped Expanded absolute path
+function Composition:MapPath(path) end
+
+--- Expands all path mappings in a multi-segment path string.
+---
+--- Unlike `MapPath()`, this function preserves all segments separated by
+--- semicolons and returns each resolved path entry in a table.
+---
+--- This is used when multiple directories are encoded in a single string.
+---@param path string Multi-segment mapped path string
+---@return string[] mapped List of expanded absolute paths
+function Composition:MapPathSegments(path) end
+
+--- Aborts an active network render session.
+function Composition:NetRenderAbort() end
+
+--- Marks the end of a network render session.
+function Composition:NetRenderEnd() end
+
+--- Starts a network render session.
+function Composition:NetRenderStart() end
+
+--- Returns timing information for network rendering.
+---@return number time Render timing value
+function Composition:NetRenderTime() end
+
+--- Pastes tools from the clipboard or from a settings table.
+---
+--- If no settings table is provided, the system clipboard is used.
+---@param settings table? Optional tool settings table
+---@return boolean success True if paste succeeded
+function Composition:Paste(settings) end
+
+--- Starts interactive playback.
+---
+--- If `reverse` is true, playback runs backwards.
+---@param reverse boolean? Play in reverse direction
+function Composition:Play(reverse) end
+
+--- Prints a message in the context of this composition.
+---
+--- Useful when working with multiple compositions and needing isolated logs.
+---@param msg string Message to print
+function Composition:Print(msg) end
+
+--- Redoes one or more previously undone actions.
+---
+--- If `count` is negative, this behaves like Undo().
+---@param count number Number of redo steps
+function Composition:Redo(count) end
+
+--- Starts rendering the composition.
+---
+--- This function supports both positional arguments and a table-based
+--- configuration mode for non-contiguous or advanced render setups.
+---
+--- When `wait` is true, script execution blocks until render completes.
+---
+--- See documentation for full table-based render options.
+---@param wait boolean? Wait for render completion
+---@param start number? Start frame
+---@param finish number? End frame
+---@param proxy number? Proxy scale factor
+---@param hiq boolean? High quality render
+---@param motionblur boolean? Enable motion blur
+---@return boolean? success True if render started/completed successfully
+function Composition:Render(wait, start, finish, proxy, hiq, motionblur) end
+
+----------------------------------------------------------------
+--- Start a render of the composition.
+---
+--- This function supports two different invocation styles:
+--- 1. Direct parameter style (legacy positional arguments)
+--- 2. Table-based configuration style (recommended for complex renders)
+---
+--- The render system supports non-contiguous frame ranges, proxy scaling,
+--- motion blur toggling, and selective tool rendering.
+---
+--- If a Tool is provided in the render settings, rendering will stop at that
+--- tool and ignore downstream nodes (including savers).
+---
+--- If Wait is true, the script execution will pause until rendering completes.
+---
+--- Frame ranges may be continuous or discontinuous (e.g. "1..10,20,30..40").
+---
+---@param settings fu.CompositionRenderSettings|fu.CompositionRenderTable Render configuration
+---@return boolean? success True if render started/completed successfully, nil if failed
+function Composition:Render(settings) end
+
+----------------------------------------------------------------
+--- Collapses a filesystem path back into Fusion path maps where possible.
+---
+--- This performs the inverse of MapPath(), converting absolute paths into
+--- symbolic path mappings such as Comp:, Fusion:, or custom user-defined maps.
+---
+--- This is useful for storing portable paths inside compositions or scripts,
+--- ensuring that paths remain valid across different systems.
+---
+---@param mapped string Absolute or expanded filesystem path
+---@return string path Path with restored Fusion path mappings
+function Composition:ReverseMapPath(mapped) end
+
+----------------------------------------------------------------
+--- Executes a script within the composition scripting context.
+---
+--- The script runs with access to `fusion` and `composition` globals.
+--- The filename may be absolute or relative to the comp's Scripts: path.
+---
+--- Python scripts are supported via:
+--- !Py:  (default Python version)
+--- !Py2: Python 2
+--- !Py3: Python 3
+---
+---@param filename string Script file path
+function Composition:RunScript(filename) end
+
+----------------------------------------------------------------
+--- Saves the current composition to disk.
+---
+--- The filename must be valid from the perspective of the system executing
+--- the save operation. In network scenarios, the path is resolved on the
+--- remote system performing the save.
+---
+---@param filename string Full composition file path
+---@return boolean success True if saved successfully
+function Composition:Save(filename) end
+
+----------------------------------------------------------------
+--- Opens a Save As dialog allowing the user to choose a save location.
+---
+--- This operation is interactive and blocks execution until resolved.
+function Composition:SaveAs() end
+
+----------------------------------------------------------------
+--- Opens a Save As dialog and saves a copy of the composition.
+---
+--- The original composition remains unchanged.
+function Composition:SaveCopyAs() end
+
+----------------------------------------------------------------
+--- Sets the currently active tool in the composition.
+---
+--- Only one tool can be active at any time.
+--- Passing nil clears the active tool selection.
+--- Active tool differs from selected tools (selection is multi-tool).
+---
+---@param tool fu.Tool? Tool to set as active, or nil to clear selection
+function Composition:SetActiveTool(tool) end
+
+----------------------------------------------------------------
+--- Stores persistent data on the composition.
+---
+--- Data is saved with the composition file (.comp) and persists across sessions.
+--- Keys may use dot notation to create hierarchical tables.
+---
+--- Storage behavior depends on object context:
+--- - Fusion app: stored in Fusion.prefs
+--- - Composition: stored in .comp file
+--- - Ephemeral objects: may not persist
+---
+---@param name string Key name (supports "table.subtable" format)
+---@param value any Value to store (number, string, boolean, or table)
+function Composition:SetData(name, value) end
+
+---------------------------------------------------------------------
+--- Sets composition preferences.
+---
+--- This version accepts a key/value pair for a single preference.
+--- It can be used to set or override individual preference entries.
+---
+--- Preferences are deeply integrated into Fusion's configuration system.
+--- Keys may use dot notation to target nested preference tables.
+---
+--- Example:
+--- ```lua
+--- comp:SetPrefs("Comp.Interactive.BackgroundRender", true)
+--- ```
+---
+--- WARNING:
+--- Invalid values may still return true even if not applied correctly.
+---
+---@param prefname string Preference key
+---@param val any Preference value
+---@return boolean success
+function Composition:SetPrefs(prefname, val) end
+
+---------------------------------------------------------------------
+--- Sets multiple composition preferences using a table.
+---
+--- The table must follow the format:
+--- [prefs_name] = value
+---
+--- Nested tables are supported and will be merged into preference hierarchy.
+---
+--- If a preference does not exist, it will be created and persisted.
+---
+--- Example:
+--- ```lua
+--- comp:SetPrefs({
+---     ["Comp.Unsorted.GlobalStart"] = 0,
+---     ["Comp.Unsorted.GlobalEnd"] = 100
+--- })
+--- ```
+---
+---@param prefs table<string, any> Preference map
+---@return boolean success
+function Composition:SetPrefs(prefs) end
+
+---------------------------------------------------------------------
+--- Starts an undo block for grouping multiple operations.
+---
+--- All changes between StartUndo and EndUndo are treated as a single
+--- undoable action in the UI.
+---
+--- IMPORTANT:
+--- At least one actual modification must occur for the undo entry
+--- to be registered in the undo stack.
+---
+--- Example:
+--- ```lua
+--- comp:StartUndo("Add some tools")
+--- local bg1 = Background{}
+--- local pl1 = Plasma{}
+--- local mg1 = Merge{ Background = bg1, Foreground = pl1 }
+--- comp:EndUndo(true)
+--- ```
+---
+---@param name string Undo label shown in the UI
+function Composition:StartUndo(name) end
+
+---------------------------------------------------------------------
+--- Stops interactive playback in the composition:
+---
+--- Equivalent to pressing the Stop button in the UI transport controls.
+function Composition:Stop() end
+
+---------------------------------------------------------------------
+--- Performs undo or redo operations.
+---
+--- If count is positive → Undo
+--- If count is negative → Redo
+---
+---@param count number Number of undo steps (negative = redo)
+function Composition:Undo(count) end
+
+---------------------------------------------------------------------
+--- Unlocks the composition for interactive UI operations.
+---
+--- When locked, Fusion suppresses dialogs and disables reactive updates.
+--- Unlock restores normal interactive behavior.
+---
+--- Safe to call even if already unlocked.
+function Composition:Unlock() end
+
+---------------------------------------------------------------------
+--- Forces all composition views to refresh.
+---
+--- Used after script-driven changes to ensure UI consistency.
+function Composition:UpdateViews() end
