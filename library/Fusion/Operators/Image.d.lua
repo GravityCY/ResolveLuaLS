@@ -1,0 +1,31 @@
+---@meta
+
+---@class fu.ImageDataWindow
+---@field x number X position of the valid data window (in pixels)
+---@field y number Y position of the valid data window (in pixels)
+---@field width number Width of the valid data window (in pixels)
+---@field height number Height of the valid data window (in pixels)
+
+
+--- Image represents a read-only pixel buffer reference exposed by the Resolve evaluation pipeline.
+---
+--- It provides metadata about the evaluated image, including dimensions, scaling, offsets,
+--- proxy behavior, and data window information.
+---
+--- This class does NOT expose pixel-level manipulation. It is strictly informational.
+--- All values reflect the current evaluated state and are read-only.
+---@class fu.Image : fu.Parameter
+---@field DataWindow fu.ImageDataWindow Rectangle of valid data pixels (read-only)
+---@field Depth number Image depth indicator (not in bits) (read-only)
+---@field Field number Field indicator (read-only)
+---@field Height number Actual image height in pixels (read-only)
+---@field OriginalHeight number Unproxied image height in pixels (read-only)
+---@field OriginalWidth number Unproxied image width in pixels (read-only)
+---@field OriginalXScale number Unproxied pixel X aspect (read-only)
+---@field OriginalYScale number Unproxied pixel Y aspect (read-only)
+---@field ProxyScale number Image proxy scale multiplier (read-only)
+---@field Width number Actual image width in pixels (read-only)
+---@field XOffset number Image X offset (read-only)
+---@field XScale number Pixel X aspect (read-only)
+---@field YOffset number Image Y offset (read-only)
+---@field YScale number Pixel Y aspect (read-only)

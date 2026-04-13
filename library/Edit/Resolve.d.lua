@@ -7,8 +7,12 @@ local Resolve = {};
 
 res = Resolve;
 
---- Dump anything to console
+--- Dump anything to console console!
 function dump(...) end
+--- Dump anything to the console!
+function dumptostr(...) end
+--- Prints helpful output of the structure of classes to the console!
+function Help(...) end
 
 --- Returns the Fusion object. Starting point for Fusion scripts.
 ---@return fu.Fusion

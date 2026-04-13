@@ -37,8 +37,13 @@ local Fusion = {};
 fu = Fusion;
 fusion = Fusion;
 
+--- Returns the attribute table for this input.
+---
+--- This provides runtime metadata such as type, limits, UI behavior,
+--- and connection state.
+---@param id string? Optional specific lookup
 ---@return fu.FusionAttrs
-function Fusion:GetAttrs() end
+function Fusion:GetAttrs(id) end
 
 ---@return boolean
 function Fusion:AllowNetwork() end

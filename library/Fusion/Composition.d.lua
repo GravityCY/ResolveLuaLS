@@ -20,7 +20,7 @@
 ---@field COMPB_Locked boolean This indicates if the composition is currently locked
 
 ---@class fu.Comp
----@field Activetool fu.Tool Represents the currently active tool on this comp (read-only).
+---@field Activetool fu.Operator Represents the currently active tool on this comp (read-only).
 ---@field AutoPos boolean Enable autoupdating of XPos/YPos when adding tools.
 ---@field CurrentFrame fu.FuFrame Represents the currently active frame for this composition (read-only).
 ---@field CurrentTime number The current time position for this composition.
@@ -60,7 +60,7 @@ function Comp:AbortRenderUI() end
 ---@param defsettings boolean?
 ---@param xpos number?
 ---@param ypos number?
----@return fu.Tool
+---@return fu.Operator
 function Comp:AddTool(id, defsettings, xpos, ypos) end
 
 --- Adds a tool to the comp.
@@ -185,7 +185,7 @@ function Comp:Copy() end
 --- 
 --- Returns true if successful, else false.
 --- 
----@param tool fu.Tool
+---@param tool fu.Operator
 ---@return boolean
 function Comp:Copy(tool) end
 
@@ -215,7 +215,7 @@ function Comp:CopySettings() end
 --- Accepts no parameters (currently selected tools), a tool or a list of tools.
 --- 
 --- Returns the toollist as settings table.
----@param tool fu.Tool
+---@param tool fu.Operator
 ---@return table
 function Comp:CopySettings(tool) end
 
@@ -284,7 +284,7 @@ function Comp:SaveCopyAs() end
 --- 
 --- Note that ActiveTool also means the tool is selected, while selected tools are not automativally
 --- Active. Only one tool can be Active at a time. To select tools use FlowView:Select().
----@param tool fu.Tool
+---@param tool fu.Operator
 function Comp:SetActiveTool(tool) end
 
 --- Set custom persistent data.
